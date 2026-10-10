@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Maclo creators</title>
+<!--
+  A creator's own numbers. One static file, no build, no key.
+
+  The private part of the link is everything after the # (creators.mjs prints
+  it once). A browser never sends the fragment to the server it loads the page
+  from, so the secret stays out of the host's logs and out of Referer headers;
+  it is only ever POSTed to the creator-dashboard function, which keeps a
+  SHA-256 of it and nothing else. The page is read-only and names no user.
+
+  Colours and type are the app's (DESIGN.md): cream ground, white cards, maroon
+  ink, lime as the one accent, numbers tabular. Sentence case throughout.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --cream: #FBF7EF; --surface: #FFFFFF; --fog: #F2EEE6; --smoke: #E7E1D8;
+    --ink: #2C0A0A; --soft: #5B524C; --muted: #736A63;
+    --lime: #AACC2E; --lime-soft: #EEF5D6; --lime-ink: #5F7716; --mark: #748F1C;
+    --panel-a: #3E731C; --panel-b: #2E5A1B; --panel-lime: #C8E34F;
+    --warn: #8A5A12; --warn-soft: #FBEFD9; --error: #B5453F; --error-soft: #F8E4E2;
+    --shadow: 0 1px 2px rgba(44,10,10,.05), 0 8px 24px rgba(44,10,10,.06);
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--cream); color: var(--ink);
+    font: 400 15px/1.5 "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-variant-numeric: tabular-nums;
+  }
+  main { max-width: 760px; margin: 0 auto; padding: 20px 16px 56px; display: grid; gap: 16px; }
+  header.top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 4px 2px; }
+  .wordmark { font: 700 26px/1 Outfit, sans-serif; letter-spacing: -1px; color: var(--mark); }
+  .top span { color: var(--muted); font-weight: 600; font-size: 13px; }
+  h1, h2, p { margin: 0; }
+  h2 { font-size: 17px; font-weight: 700; letter-spacing: -.2px; }
+  .card { background: var(--surface); border-radius: 20px; padding: 20px; box-shadow: var(--shadow); display: grid; gap: 14px; }
+  .muted { color: var(--muted); } .soft { color: var(--soft); } .small { font-size: 13px; }
+
+  .hero {
+    background: linear-gradient(160deg, var(--panel-a), var(--panel-b)); color: #F7FAEE;
+    border-radius: 28px; padding: 24px 20px; display: grid; gap: 18px;
+  }
+  .hero h1 { font-size: 22px; font-weight: 700; letter-spacing: -.4px; text-wrap: balance; }
+  .code-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+  .code {
+    font: 800 34px/1 "Plus Jakarta Sans", sans-serif; letter-spacing: 2px; color: var(--panel-lime);
+    background: rgba(0,0,0,.18); border-radius: 14px; padding: 12px 16px; overflow-wrap: anywhere;
+  }
+  button {
+    font: 700 14px/1 "Plus Jakarta Sans", sans-serif; color: var(--ink); background: var(--lime);
+    border: 0; border-radius: 999px; padding: 12px 18px; cursor: pointer; min-height: 44px;
+  }
+  button:focus-visible, a:focus-visible { outline: 3px solid var(--panel-lime); outline-offset: 2px; }
+  button.quiet { background: var(--fog); }
+  .hero .small { color: rgba(247,250,238,.82); }
+  .paused { background: var(--warn-soft); color: var(--warn); border-radius: 14px; padding: 10px 14px; font-weight: 600; font-size: 13px; }
+
+  .money { display: grid; gap: 4px; }
+  .money .big { font-size: 44px; font-weight: 800; letter-spacing: -1.6px; line-height: 1.05; }
+  .split { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .split div { background: var(--fog); border-radius: 14px; padding: 12px; display: grid; gap: 2px; }
+  .split b, .tiles b { font-size: 20px; font-weight: 800; letter-spacing: -.5px; }
+  .label { font-size: 12px; font-weight: 600; color: var(--muted); }
+  .note { background: var(--warn-soft); color: var(--warn); border-radius: 14px; padding: 10px 14px; font-size: 13px; font-weight: 600; }
+
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .tiles div { background: var(--fog); border-radius: 14px; padding: 14px 12px; display: grid; gap: 2px; }
+  .tiles b { font-size: 26px; }
+  .plans { display: grid; gap: 8px; }
+  .plans div { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--smoke); }
+  .plans div:first-child { border-top: 0; padding-top: 0; }
+
+  /* Four short columns fit a 375px phone; nothing on this page scrolls sideways. */
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: right; padding: 10px 6px; border-top: 1px solid var(--smoke); }
+  th:first-child, td:first-child { text-align: left; padding-left: 0; white-space: nowrap; }
+  th:last-child, td:last-child { padding-right: 0; }
+  thead th { border-top: 0; font-size: 12px; font-weight: 600; color: var(--muted); padding-top: 0; }
+  /* Each sale or payment as one row: what it was on the left, the money on the right. */
+  ul.list { list-style: none; margin: 0; padding: 0; }
+  ul.list li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--smoke); }
+  ul.list li:first-child { border-top: 0; padding-top: 0; }
+  ul.list .what { display: grid; gap: 2px; min-width: 0; }
+  ul.list .what b { font-weight: 600; }
+  ul.list .amount { display: grid; gap: 4px; justify-items: end; text-align: right; flex: none; }
+  ul.list .amount b { font-size: 16px; font-weight: 700; }
+  .chip { display: inline-block; border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 700; }
+  .chip.payable, .chip.paid { background: var(--lime-soft); color: var(--lime-ink); }
+  .chip.pending { background: var(--fog); color: var(--soft); }
+  .chip.void, .chip.adjust { background: var(--error-soft); color: var(--error); }
+  ul.rules { margin: 0; padding-left: 18px; display: grid; gap: 6px; color: var(--soft); max-width: 62ch; }
+  footer { color: var(--muted); font-size: 12px; text-align: center; display: grid; gap: 10px; justify-items: center; }
+  .state { text-align: center; padding: 48px 20px; }
+  .state h1 { font-size: 22px; letter-spacing: -.4px; margin-bottom: 8px; }
+  [hidden] { display: none !important; }
+  @media (max-width: 560px) {
+    .tiles { grid-template-columns: repeat(2, 1fr); }
+    .money .big { font-size: 38px; }
+    .code { font-size: 28px; }
+    table { font-size: 13px; }
+  }
+  @media (prefers-reduced-motion: no-preference) { button { transition: transform .12s ease-out; } button:active { transform: scale(.97); } }
+</style>
+</head>
+<body>
+<main>
+  <header class="top"><div class="wordmark">maclo</div><span>Creator dashboard</span></header>
+
+  <section id="loading" class="card state" aria-live="polite"><h1>Loading your numbers</h1><p class="muted">One moment.</p></section>
+
+  <section id="error" class="card state" hidden>
+    <h1 id="error-title">This link isn't valid</h1>
+    <p id="error-text" class="soft">Open the dashboard link exactly as it was sent to you. If it still doesn't work, ask the Maclo team for a new one.</p>
+  </section>
+
+  <div id="app" hidden style="display:grid;gap:16px">
+    <section class="hero">
+      <h1 id="hello"></h1>
+      <div class="code-row"><div class="code" id="code"></div><button id="copy" type="button">Copy code</button></div>
+      <p class="small">People type your code on the plans screen in the Maclo app to get the creator price on any plan.</p>
+      <p class="paused" id="paused" hidden>Your code is paused for new people. Everything you've already earned still stands.</p>
+    </section>
+
+    <section class="card" aria-labelledby="h-money">
+      <h2 id="h-money">Your commission</h2>
+      <div class="money"><span class="label">Ready to be paid</span><span class="big" id="payable"></span></div>
+      <p class="note" id="owing" hidden></p>
+      <div class="split">
+        <div><span class="label">Pending</span><b id="pending"></b></div>
+        <div><span class="label">Paid so far</span><b id="paid"></b></div>
+        <div><span class="label">Earned in total</span><b id="earned"></b></div>
+      </div>
+      <p class="small muted" id="pending-note"></p>
+    </section>
+
+    <section class="card" aria-labelledby="h-funnel">
+      <h2 id="h-funnel">Your code so far</h2>
+      <div class="tiles">
+        <div><b id="f-entries"></b><span class="label">entered your code</span></div>
+        <div><b id="f-trials"></b><span class="label">started a free trial</span></div>
+        <div><b id="f-paying"></b><span class="label">became paying members</span></div>
+        <div><b id="f-refunds"></b><span class="label">were refunded</span></div>
+      </div>
+      <div class="plans" id="plans"></div>
+    </section>
+
+    <section class="card" aria-labelledby="h-months">
+      <h2 id="h-months">Last six months</h2>
+      <table>
+        <thead><tr><th scope="col">Month</th><th scope="col">Entered code</th><th scope="col">New paying</th><th scope="col">Commission</th></tr></thead>
+        <tbody id="months"></tbody>
+      </table>
+    </section>
+
+    <section class="card" aria-labelledby="h-recent">
+      <h2 id="h-recent">Recent commission</h2>
+      <p class="muted small" id="recent-empty" hidden>Nothing yet. Each sale appears here as soon as Apple confirms the payment.</p>
+      <ul class="list" id="recent"></ul>
+    </section>
+
+    <section class="card" aria-labelledby="h-payouts" id="payouts-card" hidden>
+      <h2 id="h-payouts">Payments to you</h2>
+      <ul class="list" id="payouts"></ul>
+    </section>
+
+    <section class="card" aria-labelledby="h-rules">
+      <h2 id="h-rules">How it works</h2>
+      <ul class="rules" id="rules"></ul>
+    </section>
+
+    <footer><span id="asof"></span><button class="quiet" id="refresh" type="button">Refresh</button></footer>
+  </div>
+</main>
+<script>
+(() => {
+  const API = 'https://rdqvspfwnubwngqvxcgz.supabase.co/functions/v1/creator-dashboard';
+  const $ = (id) => document.getElementById(id);
+  // Read on every load, not once: changing only the part after the # does not
+  // reload a page, so a second link pasted into an open tab would otherwise
+  // keep showing the first (or "not valid", if the tab was opened bare).
+  const readToken = () => decodeURIComponent((location.hash || '').replace(/^#/, '')) || new URLSearchParams(location.search).get('t') || '';
+  const gbp = (pence) => `${pence < 0 ? '-' : ''}£${(Math.abs(pence) / 100).toFixed(2)}`;
+  const day = (iso) => new Date(iso + (iso.length === 10 ? 'T12:00:00Z' : '')).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  const shortDay = (iso) => new Date(iso + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  const monthName = (ym) => new Date(ym + '-15T12:00:00Z').toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+  const PLAN = { monthly: 'Monthly', yearly: 'Yearly', lifetime: 'Founder Lifetime' };
+  // Built with textContent only: nothing from the server is ever parsed as HTML.
+  const cell = (text, tag = 'td') => { const el = document.createElement(tag); el.textContent = text; return el; };
+  const row = (...cells) => { const tr = document.createElement('tr'); tr.append(...cells); return tr; };
+  const el = (tag, text, cls) => { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; };
+  // One list row: a title and a quieter line under it on the left; the amount, and optionally a chip, on the right.
+  const item = (title, sub, amount, chip) => {
+    const li = document.createElement('li');
+    const what = el('div', null, 'what'); what.append(el('b', title), el('span', sub, 'muted small'));
+    const money = el('div', null, 'amount'); money.append(el('b', amount)); if (chip) money.append(chip);
+    li.append(what, money); return li;
+  };
+
+  function fail(title, text) {
+    $('loading').hidden = true; $('app').hidden = true; $('error').hidden = false;
+    if (title) $('error-title').textContent = title;
+    if (text) $('error-text').textContent = text;
+  }
+
+  function render(d) {
+    $('hello').textContent = `Hi ${d.creator.name}, here's how your code is doing`;
+    $('code').textContent = d.creator.code;
+    $('paused').hidden = d.creator.active;
+
+    const c = d.commission;
+    $('payable').textContent = gbp(Math.max(0, c.payablePence));
+    $('pending').textContent = gbp(c.pendingPence);
+    $('paid').textContent = gbp(c.paidPence);
+    $('earned').textContent = gbp(c.earnedPence);
+    $('owing').hidden = c.payablePence >= 0;
+    if (c.payablePence < 0) $('owing').textContent = `${gbp(-c.payablePence)} will come off your next commission, because a sale was refunded after you had been paid for it.`;
+    $('pending-note').textContent = `Pending commission is inside Apple's ${d.rates.holdDays}-day refund window. It moves to "ready to be paid" when that passes.`;
+
+    $('f-entries').textContent = d.funnel.codeEntries;
+    $('f-trials').textContent = d.funnel.trialsStarted;
+    $('f-paying').textContent = d.funnel.payingUsers;
+    $('f-refunds').textContent = d.funnel.refunds;
+    const plans = $('plans'); plans.replaceChildren();
+    for (const [key, each] of [['yearly', `${gbp(d.rates.yearlyPence)} each`], ['monthly', `${gbp(d.rates.monthlyPence)} a paid month, up to ${d.rates.monthlyMonthsCap}`], ['lifetime', `${gbp(d.rates.lifetimePence)} each`]]) {
+      const line = document.createElement('div');
+      const left = document.createElement('span'); left.textContent = `${PLAN[key]}: ${d.payingUsersByPlan[key]} paying`;
+      const right = document.createElement('span'); right.className = 'muted small'; right.textContent = each;
+      line.append(left, right); plans.append(line);
+    }
+
+    const months = $('months'); months.replaceChildren();
+    for (const m of [...d.byMonth].reverse()) months.append(row(cell(monthName(m.month), 'th'), cell(m.codeEntries), cell(m.newPayingUsers), cell(gbp(m.commissionPence))));
+    months.querySelectorAll('th').forEach((th) => { th.scope = 'row'; th.style.fontWeight = '600'; });
+
+    const recent = $('recent'); recent.replaceChildren();
+    $('recent-empty').hidden = d.recent.length > 0; recent.hidden = d.recent.length === 0;
+    for (const r of d.recent) {
+      const label = r.status === 'pending' ? `Pending until ${shortDay(r.payableOn)}` : r.status === 'payable' ? 'Ready to be paid'
+        : r.status === 'paid' ? 'Paid' : r.status === 'void' ? 'Refunded' : 'Refund adjustment';
+      const chip = el('span', label, `chip ${r.status === 'refund adjustment' ? 'adjust' : r.status}`);
+      recent.append(item(PLAN[r.plan] || r.plan, day(r.date), r.status === 'void' ? '£0.00' : gbp(r.amountPence), chip));
+    }
+
+    $('payouts-card').hidden = d.payouts.length === 0;
+    const payouts = $('payouts'); payouts.replaceChildren();
+    for (const p of d.payouts) payouts.append(item(day(p.date), p.reference || 'Payment', gbp(p.amountPence)));
+
+    const rules = $('rules'); rules.replaceChildren();
+    for (const text of [
+      `Yearly plan: ${gbp(d.rates.yearlyPence)} once, when the person pays for their first year.`,
+      `Monthly plan: ${gbp(d.rates.monthlyPence)} for every month they pay, for their first ${d.rates.monthlyMonthsCap} months.`,
+      `Founder Lifetime: ${gbp(d.rates.lifetimePence)} once.`,
+      'A free trial counts once it turns into a payment. Until then it shows as a trial.',
+      `Commission is ready to be paid ${d.rates.holdDays} days after the payment. If Apple refunds a sale, its commission is removed.`,
+      'Apple does not tell anyone which code led to a download, so this page counts people who entered your code, not downloads.',
+    ]) { const li = document.createElement('li'); li.textContent = text; rules.append(li); }
+
+    $('asof').textContent = `Updated ${new Date(d.asOf).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`;
+    $('loading').hidden = true; $('error').hidden = true; $('app').hidden = false;
+  }
+
+  async function load() {
+    const token = readToken();
+    if (!/^[A-Za-z0-9_-]{32,80}$/.test(token)) return fail();
+    try {
+      const res = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }) });
+      if (res.status === 404) return fail();
+      if (res.status === 429) return fail('Too many refreshes', 'Wait a minute, then open the page again.');
+      if (!res.ok) return fail("We couldn't load your numbers", 'Nothing is wrong with your link. Try again in a minute.');
+      render(await res.json());
+    } catch {
+      fail("We couldn't load your numbers", 'Check your connection and try again.');
+    }
+  }
+
+  $('copy').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText($('code').textContent); $('copy').textContent = 'Copied'; }
+    catch { $('copy').textContent = 'Press and hold the code to copy'; }
+    setTimeout(() => { $('copy').textContent = 'Copy code'; }, 2200);
+  });
+  $('refresh').addEventListener('click', load);
+  window.addEventListener('hashchange', load);
+  load();
+})();
+</script>
+</body>
+</html>
