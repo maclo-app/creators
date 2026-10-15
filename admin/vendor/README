@@ -1,0 +1,13 @@
+Pinned copies of the two libraries the admin page uses, served from the same
+site so the page does not depend on a public CDN.
+
+supabase-2.101.1.js       @supabase/supabase-js 2.101.1, dist/umd/supabase.js from
+                          node_modules (identical to the jsDelivr copy, sha256
+                          9de991230110299cbbba83987141449e579997a90a5fc077cdfe0aa51e8d553d).
+                          MIT licence: https://github.com/supabase/supabase-js
+chart-4.4.1.umd.min.js    Chart.js 4.4.1 from cdnjs (sha256
+                          81ffafe13c37e1b25793b020d446f4d9739b949dadb7f9f79d709a0cad781c2f).
+                          MIT licence: https://github.com/chartjs/Chart.js
+
+To upgrade: replace the file, change the version in its name and in
+admin/index.html, and update the hash here.

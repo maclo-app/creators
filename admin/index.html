@@ -1,0 +1,596 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Maclo creator admin</title>
+<!--
+  The owners' page for the creator programme: every creator in one place, the
+  money owed this month, and the changes an owner makes.
+
+  Who gets in: a Maclo account that is on the allowlist (creator_admins). You
+  sign in with a code emailed to that account's address; the page never creates
+  an account. Being signed in is not enough on its own: the creator-admin
+  function checks the allowlist on every request, so this page holds no power
+  of its own and nothing here is a secret. The key below is Maclo's public
+  "anon" key, the same one inside the app; publish.sh fills it in.
+
+  Everything from the server is rendered with textContent, never as HTML.
+  Same look as the creators' own page (../index.html): cream ground, white
+  cards, maroon ink, lime as the one accent, tabular numbers.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<!-- Both libraries are copies kept beside this page (vendor/), pinned, not
+     loaded from a public CDN: a page that handles payments should not depend on
+     a third party's server being up, or on what it serves at that address
+     tomorrow. supabase-js is the file from node_modules at the version the app
+     uses; Chart.js was taken from cdnjs. See vendor/README. -->
+<script src="vendor/supabase-2.101.1.js"></script>
+<script src="vendor/chart-4.4.1.umd.min.js"></script>
+<style>
+  :root {
+    --cream: #FBF7EF; --surface: #FFFFFF; --fog: #F2EEE6; --smoke: #E7E1D8;
+    --ink: #2C0A0A; --soft: #5B524C; --muted: #736A63;
+    --lime: #AACC2E; --lime-soft: #EEF5D6; --lime-ink: #5F7716; --mark: #748F1C;
+    --panel-a: #3E731C; --panel-b: #2E5A1B; --panel-lime: #C8E34F;
+    --warn: #8A5A12; --warn-soft: #FBEFD9; --error: #B5453F; --error-soft: #F8E4E2;
+    --terra: #C46B3A;
+    --shadow: 0 1px 2px rgba(44,10,10,.05), 0 8px 24px rgba(44,10,10,.06);
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--cream); color: var(--ink);
+    font: 400 15px/1.5 "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-variant-numeric: tabular-nums;
+  }
+  main { max-width: 1120px; margin: 0 auto; padding: 20px 16px 64px; display: grid; gap: 16px; }
+  header.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 4px 2px; }
+  .brand { display: flex; align-items: baseline; gap: 10px; }
+  .wordmark { font: 700 26px/1 Outfit, sans-serif; letter-spacing: -1px; color: var(--mark); }
+  .brand span { color: var(--muted); font-weight: 600; font-size: 13px; }
+  .who { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; font-weight: 600; }
+  h1, h2, h3, p { margin: 0; }
+  h1 { font-size: 22px; letter-spacing: -.4px; text-wrap: balance; }
+  h2 { font-size: 17px; font-weight: 700; letter-spacing: -.2px; }
+  h3 { font-size: 15px; font-weight: 700; }
+  .card { background: var(--surface); border-radius: 20px; padding: 20px; box-shadow: var(--shadow); display: grid; gap: 14px; min-width: 0; }
+  .muted { color: var(--muted); } .soft { color: var(--soft); } .small { font-size: 13px; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  button, .button {
+    font: 700 14px/1 "Plus Jakarta Sans", sans-serif; color: var(--ink); background: var(--lime);
+    border: 0; border-radius: 999px; padding: 12px 18px; cursor: pointer; min-height: 42px; white-space: nowrap;
+  }
+  button.quiet { background: var(--fog); }
+  button.danger { background: var(--error-soft); color: var(--error); }
+  button:disabled { opacity: .55; cursor: default; }
+  button:focus-visible, input:focus-visible, textarea:focus-visible, tr:focus-visible { outline: 3px solid var(--panel-lime); outline-offset: 2px; }
+  input, textarea {
+    font: 500 15px/1.4 "Plus Jakarta Sans", sans-serif; color: var(--ink); background: var(--fog);
+    border: 1.5px solid transparent; border-radius: 12px; padding: 12px 14px; width: 100%;
+  }
+  input:focus, textarea:focus { border-color: var(--lime); outline: none; background: var(--surface); }
+  label { display: grid; gap: 6px; font-size: 13px; font-weight: 600; color: var(--soft); }
+  .form { display: grid; gap: 12px; max-width: 420px; }
+  .error { background: var(--error-soft); color: var(--error); border-radius: 12px; padding: 10px 14px; font-size: 13px; font-weight: 600; }
+  .ok { background: var(--lime-soft); color: var(--lime-ink); border-radius: 12px; padding: 10px 14px; font-size: 13px; font-weight: 600; }
+
+  /* Summary first: the numbers that need a decision, then the detail. */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+  .tile.wide { grid-column: 1 / -1; }
+  .tile { background: var(--surface); border-radius: 16px; padding: 14px 16px; box-shadow: var(--shadow); display: grid; gap: 2px; }
+  .tile b { font-size: 26px; font-weight: 800; letter-spacing: -.6px; }
+  .tile.owed { background: linear-gradient(160deg, var(--panel-a), var(--panel-b)); color: #F7FAEE; }
+  .tile.owed .label { color: rgba(247,250,238,.82); }
+  .label { font-size: 12px; font-weight: 600; color: var(--muted); }
+
+  .run { display: grid; gap: 12px; }
+  ul.list { list-style: none; margin: 0; padding: 0; }
+  ul.list > li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--smoke); flex-wrap: wrap; }
+  ul.list > li:first-child { border-top: 0; padding-top: 0; }
+  .what { display: grid; gap: 2px; min-width: 0; }
+  .what b { font-weight: 600; }
+  .paybox { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .paybox input { width: 220px; padding: 9px 12px; }
+  .amount { font-size: 18px; font-weight: 800; letter-spacing: -.3px; }
+
+  .charts { display: grid; grid-template-columns: 3fr 2fr; gap: 16px; }
+  .chartbox { position: relative; height: 240px; }
+
+  /* The table scrolls inside its own card on a phone; the page never does. */
+  .scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { width: 100%; border-collapse: collapse; min-width: 760px; }
+  th, td { text-align: right; padding: 11px 8px; border-top: 1px solid var(--smoke); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; padding-left: 0; }
+  th:last-child, td:last-child { padding-right: 0; }
+  thead th { border-top: 0; font-size: 12px; font-weight: 600; color: var(--muted); padding-top: 0; }
+  thead th button { all: unset; cursor: pointer; }
+  thead th button:focus-visible { outline: 3px solid var(--panel-lime); }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover td { background: var(--cream); }
+  td .name { font-weight: 600; display: block; }
+  td .code { font-size: 12px; color: var(--muted); letter-spacing: .6px; font-weight: 700; }
+  .chip { display: inline-block; border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 700; }
+  .chip.on { background: var(--lime-soft); color: var(--lime-ink); }
+  .chip.off { background: var(--warn-soft); color: var(--warn); }
+  .chip.pending { background: var(--fog); color: var(--soft); }
+  .chip.payable, .chip.paid { background: var(--lime-soft); color: var(--lime-ink); }
+  .chip.void, .chip.adjust { background: var(--error-soft); color: var(--error); }
+
+  .activity li { font-size: 13px; }
+
+  /* Sheets: a creator's detail, adding one. One open at a time. */
+  dialog { border: 0; border-radius: 22px; padding: 0; width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 48px); box-shadow: 0 24px 64px rgba(44,10,10,.25); color: var(--ink); background: var(--surface); }
+  dialog::backdrop { background: rgba(44,10,10,.32); }
+  .sheet { padding: 22px; display: grid; gap: 16px; }
+  .sheet .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .linkbox { background: var(--fog); border-radius: 12px; padding: 12px 14px; font-size: 13px; overflow-wrap: anywhere; font-weight: 600; user-select: all; }
+  .mini { width: 100%; border-collapse: collapse; min-width: 0; }
+  .mini th, .mini td { padding: 8px 4px; font-size: 13px; white-space: normal; }
+  .mini td:first-child { white-space: nowrap; }
+  /* A grid item will not shrink below its content unless told to, and a wide
+     table then pushes the whole sheet past the edge of a phone. */
+  .sheet > * { min-width: 0; }
+  .state { text-align: center; padding: 48px 20px; }
+  [hidden] { display: none !important; }
+  @media (max-width: 820px) { .charts { grid-template-columns: 1fr; } }
+  /* Seven tiles in two columns would leave one alone; the one that matters most takes the full row. */
+  @media (max-width: 560px) { .tile.owed { grid-column: 1 / -1; } }
+  @media (prefers-reduced-motion: no-preference) { button { transition: transform .12s ease-out; } button:active { transform: scale(.97); } }
+</style>
+</head>
+<body>
+<main>
+  <header class="top">
+    <div class="brand"><div class="wordmark">maclo</div><span>Creator admin</span></div>
+    <div class="who" id="who" hidden><span id="me"></span><button class="quiet" id="signout" type="button">Sign out</button></div>
+  </header>
+
+  <!-- Signing in: an emailed code, for an account that already exists. -->
+  <section class="card" id="signin" hidden>
+    <h1>Sign in</h1>
+    <p class="soft">Use the email address of your Maclo account. We'll email you a code.</p>
+    <form class="form" id="email-form">
+      <label for="email">Email<input id="email" type="email" autocomplete="email" required></label>
+      <button type="submit" id="send">Email me a code</button>
+    </form>
+    <form class="form" id="code-form" hidden>
+      <p class="soft small" id="sent-to"></p>
+      <label for="code">Code<input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="10" required></label>
+      <div class="row"><button type="submit" id="verify">Sign in</button><button type="button" class="quiet" id="restart">Use a different email</button></div>
+    </form>
+    <p class="error" id="signin-error" hidden></p>
+  </section>
+
+  <section class="card state" id="denied" hidden>
+    <h1>This account doesn't have access</h1>
+    <p class="soft">Only accounts added to the creator admin can open it. Ask for yours to be added, then sign in again.</p>
+    <div><button class="quiet" id="denied-out" type="button">Sign out</button></div>
+  </section>
+
+  <section class="card state" id="loading" hidden aria-live="polite"><h1>Loading</h1><p class="muted">One moment.</p></section>
+  <section class="card state" id="failed" hidden><h1>We couldn't load the numbers</h1><p class="soft" id="failed-text"></p><div><button id="retry" type="button">Try again</button></div></section>
+
+  <div id="app" hidden style="display:grid;gap:16px">
+    <section class="tiles" aria-label="The programme at a glance">
+      <div class="tile owed"><span class="label">Owed this month</span><b id="t-owed"></b><span class="label" id="t-owed-sub"></span></div>
+      <div class="tile"><span class="label">Paying customers</span><b id="t-paying"></b></div>
+      <div class="tile"><span class="label">Trials started</span><b id="t-trials"></b></div>
+      <div class="tile"><span class="label">Code entered</span><b id="t-entries"></b></div>
+      <div class="tile"><span class="label">Commission earned</span><b id="t-earned"></b></div>
+      <div class="tile"><span class="label">Paid out</span><b id="t-paid"></b></div>
+      <div class="tile"><span class="label">Creators</span><b id="t-creators"></b><span class="label" id="t-creators-sub"></span></div>
+    </section>
+
+    <section class="card run" aria-labelledby="h-run">
+      <div class="row">
+        <h2 id="h-run">This month's payments</h2>
+        <button class="quiet" id="csv" type="button">Download for the bank</button>
+      </div>
+      <p class="soft small" id="run-rule"></p>
+      <ul class="list" id="due"></ul>
+      <p class="muted small" id="due-empty" hidden>Nobody is due a payment this month.</p>
+      <p class="ok" id="run-ok" hidden></p>
+    </section>
+
+    <section class="charts">
+      <div class="card"><h2>Last 12 weeks</h2><div class="chartbox"><canvas id="weekly" role="img" aria-label="Code entries, trials and new paying customers per week"></canvas></div></div>
+      <div class="card"><h2>Commission by month</h2><div class="chartbox"><canvas id="monthly" role="img" aria-label="Commission earned per month"></canvas></div></div>
+    </section>
+
+    <section class="card" aria-labelledby="h-creators">
+      <div class="row">
+        <h2 id="h-creators">Creators</h2>
+        <div class="row" style="gap:8px">
+          <input id="filter" type="search" placeholder="Search name or code" style="width:220px" aria-label="Search creators">
+          <button id="add" type="button">Add a creator</button>
+        </div>
+      </div>
+      <div class="scroll">
+        <table>
+          <thead><tr>
+            <th scope="col"><button data-sort="name">Creator</button></th>
+            <th scope="col">Status</th>
+            <th scope="col"><button data-sort="entries">Code entered</button></th>
+            <th scope="col"><button data-sort="trials">Trials</button></th>
+            <th scope="col"><button data-sort="paying">Paying</button></th>
+            <th scope="col"><button data-sort="earned">Earned</button></th>
+            <th scope="col"><button data-sort="owed">Owed now</button></th>
+            <th scope="col"><button data-sort="paid">Paid</button></th>
+          </tr></thead>
+          <tbody id="creators"></tbody>
+        </table>
+      </div>
+      <p class="muted small" id="creators-empty" hidden>No creators yet. Add your first one above.</p>
+    </section>
+
+    <section class="card" aria-labelledby="h-activity">
+      <h2 id="h-activity">Recent changes</h2>
+      <ul class="list activity" id="activity"></ul>
+      <p class="muted small" id="activity-empty" hidden>Nothing has been changed here yet.</p>
+    </section>
+
+    <p class="muted small" style="text-align:center" id="asof"></p>
+  </div>
+</main>
+
+<!-- A creator's detail -->
+<dialog id="detail" aria-labelledby="d-name">
+  <div class="sheet">
+    <div class="row"><div><h1 id="d-name"></h1><span class="muted small" id="d-sub"></span></div><button class="quiet" data-close type="button">Close</button></div>
+    <div class="tiles" id="d-tiles"></div>
+    <div><h3>Last six months</h3>
+      <div class="scroll"><table class="mini"><thead><tr><th scope="col">Month</th><th scope="col">Code entered</th><th scope="col">New paying</th><th scope="col">Commission</th></tr></thead><tbody id="d-months"></tbody></table></div>
+    </div>
+    <div><h3>Recent commission</h3><ul class="list" id="d-recent"></ul><p class="muted small" id="d-recent-empty" hidden>Nothing yet.</p></div>
+    <div><h3>Payments made</h3><ul class="list" id="d-payouts"></ul><p class="muted small" id="d-payouts-empty" hidden>None yet.</p></div>
+    <form class="form" id="d-form" style="max-width:none">
+      <h3>Details</h3>
+      <label for="d-name-in">Name<input id="d-name-in" maxlength="60" required></label>
+      <label for="d-email-in">Email<input id="d-email-in" type="email"></label>
+      <label for="d-notes-in">Notes (only you and Emil see these)<textarea id="d-notes-in" rows="3" maxlength="2000"></textarea></label>
+      <div><button type="submit">Save details</button></div>
+    </form>
+    <div class="linkbox" id="d-link" hidden></div>
+    <p class="error" id="d-error" hidden></p>
+    <p class="ok" id="d-ok" hidden></p>
+    <div class="actions">
+      <button class="quiet" id="d-toggle" type="button"></button>
+      <button class="quiet" id="d-relink" type="button">Replace their dashboard link</button>
+    </div>
+  </div>
+</dialog>
+
+<!-- Adding a creator -->
+<dialog id="adder" aria-labelledby="a-title">
+  <div class="sheet">
+    <div class="row"><h1 id="a-title">Add a creator</h1><button class="quiet" data-close type="button">Close</button></div>
+    <form class="form" id="a-form" style="max-width:none">
+      <label for="a-name">Their name, as people know them<input id="a-name" maxlength="60" required></label>
+      <label for="a-code">Their code: 3 to 20 letters or numbers<input id="a-code" maxlength="20" autocapitalize="characters" required></label>
+      <label for="a-email">Their email (optional)<input id="a-email" type="email"></label>
+      <div><button type="submit" id="a-submit">Add creator</button></div>
+    </form>
+    <div id="a-done" hidden style="display:grid;gap:12px">
+      <p class="ok" id="a-done-title"></p>
+      <p class="soft">Send them this link. It opens their own dashboard, and it is only shown now: if it is lost, replace it from their page here.</p>
+      <div class="linkbox" id="a-link"></div>
+      <div class="actions"><button id="a-copy" type="button">Copy link</button><button class="quiet" data-close type="button">Done</button></div>
+    </div>
+    <p class="error" id="a-error" hidden></p>
+  </div>
+</dialog>
+
+<script>
+(() => {
+  const URL_ = 'https://rdqvspfwnubwngqvxcgz.supabase.co';
+  const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJkcXZzcGZ3bnVid25ncXZ4Y2d6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUxNDQzOTAsImV4cCI6MjA5MDcyMDM5MH0.fnSJaYrenKkla54DEfx9TlgenP8KgbZDO4_hz3-tF5Q';
+  const API = `${URL_}/functions/v1/creator-admin`;
+  const sb = window.supabase.createClient(URL_, ANON, { auth: { persistSession: true, autoRefreshToken: true, storageKey: 'maclo-creator-admin' } });
+
+  const $ = (id) => document.getElementById(id);
+  const gbp = (p) => `${p < 0 ? '-' : ''}£${(Math.abs(p) / 100).toFixed(2)}`;
+  const day = (iso) => new Date(iso + (iso.length === 10 ? 'T12:00:00Z' : '')).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  const when = (iso) => new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  const monthName = (ym) => new Date(ym + '-15T12:00:00Z').toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+  const PLAN = { monthly: 'Monthly', yearly: 'Yearly', lifetime: 'Founder Lifetime' };
+  const el = (tag, text, cls) => { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; };
+  const show = (id) => { for (const s of ['signin', 'denied', 'loading', 'failed', 'app']) $(s).hidden = s !== id; };
+  const say = (id, text) => { const n = $(id); n.textContent = text || ''; n.hidden = !text; };
+
+  let data = null;
+  let sort = { key: 'owed', dir: -1 };
+  let open = null;   // the creator in the detail sheet
+  let weeklyChart = null, monthlyChart = null;
+
+  async function call(action, payload = {}) {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) { show('signin'); throw new Error('signed out'); }
+    const res = await fetch(API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: ANON, Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ action, ...payload }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (res.status === 403 && body.code === 'NOT_ADMIN') { show('denied'); throw new Error('not admin'); }
+    if (res.status === 401) { await sb.auth.signOut(); show('signin'); throw new Error('signed out'); }
+    if (!res.ok) { const e = new Error(body.error || 'Something went wrong.'); e.status = res.status; throw e; }
+    return body;
+  }
+
+  // ── Signing in ──────────────────────────────────────────────────────────────
+  let pendingEmail = '';
+  $('email-form').addEventListener('submit', async (ev) => {
+    ev.preventDefault(); say('signin-error');
+    pendingEmail = $('email').value.trim().toLowerCase();
+    $('send').disabled = true;
+    // shouldCreateUser false: this page signs existing accounts in and never
+    // makes one, so typing a stranger's address here creates nothing.
+    const { error } = await sb.auth.signInWithOtp({ email: pendingEmail, options: { shouldCreateUser: false } });
+    $('send').disabled = false;
+    if (error) return say('signin-error', /rate|seconds/i.test(error.message) ? 'Wait a minute before asking for another code.' : "We couldn't send a code to that address. Check it is the email on your Maclo account.");
+    $('email-form').hidden = true; $('code-form').hidden = false;
+    $('sent-to').textContent = `We sent a code to ${pendingEmail}. It expires in an hour.`;
+    $('code').focus();
+  });
+  $('code-form').addEventListener('submit', async (ev) => {
+    ev.preventDefault(); say('signin-error');
+    $('verify').disabled = true;
+    const { error } = await sb.auth.verifyOtp({ email: pendingEmail, token: $('code').value.replace(/\s+/g, ''), type: 'email' });
+    $('verify').disabled = false;
+    if (error) return say('signin-error', 'That code did not work. Check it, or ask for a new one.');
+    start();
+  });
+  $('restart').addEventListener('click', () => { $('code-form').hidden = true; $('email-form').hidden = false; $('code').value = ''; say('signin-error'); });
+  const signOut = async () => { await sb.auth.signOut(); $('who').hidden = true; $('email-form').hidden = false; $('code-form').hidden = true; show('signin'); };
+  $('signout').addEventListener('click', signOut);
+  $('denied-out').addEventListener('click', signOut);
+
+  // ── Loading ─────────────────────────────────────────────────────────────────
+  async function start() {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) { $('who').hidden = true; return show('signin'); }
+    $('me').textContent = session.user.email || ''; $('who').hidden = false;
+    show('loading');
+    await load();
+  }
+  async function load() {
+    try {
+      data = await call('overview');
+      render();
+      show('app');
+    } catch (e) {
+      if (e.message === 'signed out' || e.message === 'not admin') return;
+      $('failed-text').textContent = e.message || 'Check your connection and try again.';
+      show('failed');
+    }
+  }
+  $('retry').addEventListener('click', () => { show('loading'); load(); });
+
+  // ── Drawing ─────────────────────────────────────────────────────────────────
+  function render() {
+    const t = data.totals, run = data.payoutRun;
+    $('t-owed').textContent = gbp(t.owedNowPence);
+    const dueCount = data.creators.filter((c) => c.owedNow.due).length;
+    $('t-owed-sub').textContent = dueCount ? `${dueCount} creator${dueCount === 1 ? '' : 's'} to pay` : 'nobody to pay';
+    $('t-paying').textContent = t.paying; $('t-trials').textContent = t.trials; $('t-entries').textContent = t.codeEntries;
+    $('t-earned').textContent = gbp(t.earnedPence); $('t-paid').textContent = gbp(t.paidPence);
+    $('t-creators').textContent = t.creators; $('t-creators-sub').textContent = `${t.active} active`;
+
+    const cutoff = new Date(run.cutoff).toLocaleDateString('en-GB', { timeZone: 'Europe/London', day: 'numeric', month: 'long' });
+    $('run-rule').textContent = `Payments go out on the ${run.dayOfMonth}th. Each covers commission that was ready before ${cutoff}, and anyone under ${gbp(run.minimumPence)} carries over to next month. Pay each one in your bank first, then mark it as paid here with the bank reference.`;
+    const due = $('due'); due.replaceChildren();
+    const dueList = data.creators.filter((c) => c.owedNow.due).sort((a, b) => b.owedNow.pence - a.owedNow.pence);
+    $('due-empty').hidden = dueList.length > 0;
+    for (const c of dueList) {
+      const li = document.createElement('li');
+      const what = el('div', null, 'what'); what.append(el('b', `${c.name} (${c.code})`), el('span', c.email || 'No email on file', 'muted small'));
+      const pay = el('div', null, 'paybox');
+      const amt = el('span', gbp(c.owedNow.pence), 'amount');
+      const ref = el('input'); ref.placeholder = 'Bank reference'; ref.maxLength = 140; ref.setAttribute('aria-label', `Bank reference for ${c.name}`);
+      ref.value = `MACLO ${new Date().toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }).toUpperCase()} ${c.code}`;
+      const btn = el('button', 'Mark as paid'); btn.type = 'button';
+      btn.addEventListener('click', async () => {
+        if (!ref.value.trim()) { ref.focus(); return; }
+        // A real confirmation, written into the page (the browser's own
+        // confirm() is unreliable in some views): the button asks once more.
+        if (btn.dataset.armed !== '1') { btn.dataset.armed = '1'; btn.textContent = `Confirm ${gbp(c.owedNow.pence)} paid`; setTimeout(() => { btn.dataset.armed = ''; btn.textContent = 'Mark as paid'; }, 6000); return; }
+        btn.disabled = true;
+        try {
+          const r = await call('payout', { id: c.id, reference: ref.value.trim() });
+          say('run-ok', `Recorded ${gbp(r.pence)} paid to ${c.name}. Their dashboard now shows it.`);
+          await load();
+        } catch (e) { btn.disabled = false; say('run-ok'); alertIn(li, e.message); }
+      });
+      pay.append(amt, ref, btn);
+      li.append(what, pay); due.append(li);
+    }
+
+    drawCharts();
+    drawTable();
+
+    const act = $('activity'); act.replaceChildren();
+    $('activity-empty').hidden = data.activity.length > 0;
+    const verb = { add: 'added', update: 'changed', 'new-link': 'replaced the dashboard link for', payout: 'recorded a payment to' };
+    for (const a of data.activity) {
+      const extra = a.action === 'payout' && a.details?.pence != null ? `: ${gbp(a.details.pence)}, ref ${a.details.reference ?? ''}`
+        : a.action === 'update' && a.details?.after ? `: ${Object.keys(a.details.after).map((k) => k === 'active' ? (a.details.after.active ? 'resumed' : 'paused') : k).join(', ')}` : '';
+      const li = document.createElement('li');
+      const what = el('div', null, 'what'); what.append(el('b', `${a.by} ${verb[a.action] || a.action} ${a.creator ?? ''}${extra}`), el('span', when(a.at), 'muted small'));
+      li.append(what); act.append(li);
+    }
+    $('asof').textContent = `Updated ${when(data.asOf)}. Test purchases are left out of every figure.`;
+  }
+
+  function alertIn(parent, text) {
+    let p = parent.querySelector('.error');
+    if (!p) { p = el('p', null, 'error'); p.style.width = '100%'; parent.append(p); }
+    p.textContent = text;
+  }
+
+  const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  function drawCharts() {
+    const w = data.charts.weekly, m = data.charts.monthly;
+    const wkLabels = w.map((x) => new Date(x.week + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }));
+    const grid = { color: css('--smoke') }, ticks = { color: css('--muted'), font: { family: 'Plus Jakarta Sans', size: 11 } };
+    const common = { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { labels: { color: css('--soft'), boxWidth: 12, font: { family: 'Plus Jakarta Sans', size: 12, weight: '600' } } } } };
+    weeklyChart?.destroy(); monthlyChart?.destroy();
+    weeklyChart = new Chart($('weekly'), {
+      type: 'line',
+      data: { labels: wkLabels, datasets: [
+        { label: 'Code entered', data: w.map((x) => x.codeEntries), borderColor: css('--muted'), backgroundColor: css('--muted'), tension: .3, pointRadius: 2 },
+        { label: 'Trials', data: w.map((x) => x.trials), borderColor: css('--terra'), backgroundColor: css('--terra'), tension: .3, pointRadius: 2 },
+        { label: 'New paying', data: w.map((x) => x.newPaying), borderColor: css('--panel-a'), backgroundColor: 'rgba(62,115,28,.10)', fill: true, tension: .3, pointRadius: 3 },
+      ] },
+      options: { ...common, scales: { x: { grid: { display: false }, ticks }, y: { beginAtZero: true, grid, ticks: { ...ticks, precision: 0 } } } },
+    });
+    monthlyChart = new Chart($('monthly'), {
+      type: 'bar',
+      data: { labels: m.map((x) => monthName(x.month)), datasets: [{ label: 'Commission', data: m.map((x) => x.commissionPence / 100), backgroundColor: css('--lime'), borderRadius: 6 }] },
+      options: { ...common, plugins: { ...common.plugins, legend: { display: false }, tooltip: { callbacks: { label: (c) => gbp(Math.round(c.parsed.y * 100)) } } },
+        scales: { x: { grid: { display: false }, ticks }, y: { beginAtZero: true, grid, ticks: { ...ticks, callback: (v) => `£${v}` } } } },
+    });
+  }
+
+  const sortValue = (c, key) => ({
+    name: c.name.toLowerCase(), entries: c.funnel.codeEntries, trials: c.funnel.trialsStarted, paying: c.funnel.payingUsers,
+    earned: c.commission.earnedPence, owed: c.owedNow.pence, paid: c.commission.paidPence,
+  })[key];
+  function drawTable() {
+    const q = $('filter').value.trim().toLowerCase();
+    const rows = data.creators
+      .filter((c) => !q || c.name.toLowerCase().includes(q) || c.code.toLowerCase().includes(q))
+      .sort((a, b) => { const x = sortValue(a, sort.key), y = sortValue(b, sort.key); return (x < y ? -1 : x > y ? 1 : 0) * sort.dir; });
+    const body = $('creators'); body.replaceChildren();
+    $('creators-empty').hidden = data.creators.length > 0;
+    for (const c of rows) {
+      const tr = document.createElement('tr'); tr.tabIndex = 0;
+      const who = el('td'); who.append(el('span', c.name, 'name'), el('span', c.code, 'code'));
+      const status = el('td'); status.append(el('span', c.active ? 'Active' : 'Paused', `chip ${c.active ? 'on' : 'off'}`));
+      tr.append(who, status, el('td', c.funnel.codeEntries), el('td', c.funnel.trialsStarted), el('td', c.funnel.payingUsers),
+        el('td', gbp(c.commission.earnedPence)), el('td', c.owedNow.due ? gbp(c.owedNow.pence) : c.owedNow.pence > 0 ? `${gbp(c.owedNow.pence)} (under min.)` : '£0.00'),
+        el('td', gbp(c.commission.paidPence)));
+      const openIt = () => openDetail(c.id);
+      tr.addEventListener('click', openIt);
+      tr.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openIt(); } });
+      body.append(tr);
+    }
+  }
+  $('filter').addEventListener('input', drawTable);
+  document.querySelectorAll('thead [data-sort]').forEach((b) => b.addEventListener('click', () => {
+    const key = b.dataset.sort;
+    sort = { key, dir: sort.key === key ? -sort.dir : key === 'name' ? 1 : -1 };
+    drawTable();
+  }));
+
+  // ── A creator's detail ──────────────────────────────────────────────────────
+  function openDetail(id) {
+    const c = data.creators.find((x) => x.id === id); if (!c) return;
+    open = c;
+    $('d-name').textContent = c.name;
+    $('d-sub').textContent = `Code ${c.code} · added ${day(c.createdAt)} · ${c.active ? 'active' : 'paused'}`;
+    const tiles = $('d-tiles'); tiles.replaceChildren();
+    for (const [label, value] of [
+      ['Code entered', c.funnel.codeEntries], ['Trials', c.funnel.trialsStarted], ['Paying', c.funnel.payingUsers],
+      ['Earned', gbp(c.commission.earnedPence)], ['Pending', gbp(c.commission.pendingPence)], ['Paid', gbp(c.commission.paidPence)],
+      ['Yearly / Monthly / Lifetime', `${c.payingUsersByPlan.yearly} / ${c.payingUsersByPlan.monthly} / ${c.payingUsersByPlan.lifetime}`],
+    ]) { const d = el('div', null, label.includes('/') ? 'tile wide' : 'tile'); d.style.boxShadow = 'none'; d.style.background = 'var(--fog)'; d.append(el('span', label, 'label'), el('b', value)); tiles.append(d); }
+    const months = $('d-months'); months.replaceChildren();
+    for (const m of [...c.byMonth].reverse()) { const tr = document.createElement('tr'); tr.append(el('td', monthName(m.month)), el('td', m.codeEntries), el('td', m.newPayingUsers), el('td', gbp(m.commissionPence))); months.append(tr); }
+    const recent = $('d-recent'); recent.replaceChildren(); $('d-recent-empty').hidden = c.recent.length > 0;
+    for (const r of c.recent) {
+      const li = document.createElement('li');
+      const what = el('div', null, 'what'); what.append(el('b', PLAN[r.plan] || r.plan), el('span', day(r.date), 'muted small'));
+      const label = r.status === 'pending' ? `Pending until ${day(r.payableOn)}` : r.status === 'payable' ? 'Ready' : r.status === 'paid' ? 'Paid' : r.status === 'void' ? 'Refunded' : 'Refund adjustment';
+      const right = el('div', null, 'what'); right.style.justifyItems = 'end';
+      right.append(el('b', r.status === 'void' ? '£0.00' : gbp(r.amountPence)), el('span', label, `chip ${r.status === 'refund adjustment' ? 'adjust' : r.status}`));
+      li.append(what, right); recent.append(li);
+    }
+    const pays = $('d-payouts'); pays.replaceChildren(); $('d-payouts-empty').hidden = c.payouts.length > 0;
+    for (const p of c.payouts) { const li = document.createElement('li'); const what = el('div', null, 'what'); what.append(el('b', day(p.date)), el('span', p.reference || 'Payment', 'muted small')); li.append(what, el('b', gbp(p.amountPence))); pays.append(li); }
+    $('d-name-in').value = c.name; $('d-email-in').value = c.email || ''; $('d-notes-in').value = c.notes || '';
+    $('d-toggle').textContent = c.active ? 'Pause their code for new people' : 'Resume their code';
+    $('d-toggle').className = c.active ? 'danger' : 'quiet';
+    $('d-link').hidden = true; say('d-error'); say('d-ok');
+    $('detail').showModal();
+  }
+  $('d-form').addEventListener('submit', async (ev) => {
+    ev.preventDefault(); say('d-error'); say('d-ok');
+    try {
+      await call('update', { id: open.id, name: $('d-name-in').value, email: $('d-email-in').value, notes: $('d-notes-in').value });
+      say('d-ok', 'Saved.'); await load(); refreshOpen();
+    } catch (e) { say('d-error', e.message); }
+  });
+  $('d-toggle').addEventListener('click', async () => {
+    say('d-error'); say('d-ok');
+    const pausing = open.active;
+    if (pausing && $('d-toggle').dataset.armed !== '1') { $('d-toggle').dataset.armed = '1'; $('d-toggle').textContent = 'Tap again to pause. Nobody new can use the code.'; return; }
+    $('d-toggle').dataset.armed = '';
+    try { await call('update', { id: open.id, active: !pausing }); say('d-ok', pausing ? 'Paused. What they have already earned still stands.' : 'Resumed.'); await load(); refreshOpen(); }
+    catch (e) { say('d-error', e.message); }
+  });
+  $('d-relink').addEventListener('click', async () => {
+    say('d-error'); say('d-ok');
+    if ($('d-relink').dataset.armed !== '1') { $('d-relink').dataset.armed = '1'; $('d-relink').textContent = 'Tap again: their current link will stop working'; return; }
+    $('d-relink').dataset.armed = ''; $('d-relink').textContent = 'Replace their dashboard link';
+    try {
+      const r = await call('new-link', { id: open.id });
+      $('d-link').textContent = r.link; $('d-link').hidden = false;
+      say('d-ok', 'New link made. Copy it and send it to them now: it is only shown this once.');
+      try { await navigator.clipboard.writeText(r.link); say('d-ok', 'New link made and copied. Send it to them now: it is only shown this once.'); } catch { /* select it by hand */ }
+    } catch (e) { say('d-error', e.message); }
+  });
+  function refreshOpen() { if (!open) return; const id = open.id; const keepLink = $('d-link').hidden ? null : $('d-link').textContent; const ok = $('d-ok').textContent; openDetail(id); if (keepLink) { $('d-link').textContent = keepLink; $('d-link').hidden = false; } if (ok) say('d-ok', ok); }
+
+  // ── Adding a creator ────────────────────────────────────────────────────────
+  $('add').addEventListener('click', () => {
+    $('a-form').reset(); $('a-form').hidden = false; $('a-done').hidden = true; say('a-error');
+    $('adder').showModal(); $('a-name').focus();
+  });
+  $('a-code').addEventListener('input', () => { $('a-code').value = $('a-code').value.toUpperCase().replace(/[^A-Z0-9]/g, ''); });
+  $('a-form').addEventListener('submit', async (ev) => {
+    ev.preventDefault(); say('a-error'); $('a-submit').disabled = true;
+    try {
+      const r = await call('add', { name: $('a-name').value, code: $('a-code').value, email: $('a-email').value });
+      $('a-form').hidden = true; $('a-done').hidden = false;
+      $('a-done-title').textContent = `${$('a-name').value.trim()} is added. Their code ${r.code} works in the app now.`;
+      $('a-link').textContent = r.link;
+      load();
+    } catch (e) { say('a-error', e.message); }
+    finally { $('a-submit').disabled = false; }
+  });
+  $('a-copy').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText($('a-link').textContent); $('a-copy').textContent = 'Copied'; }
+    catch { $('a-copy').textContent = 'Select the link above to copy it'; }
+    setTimeout(() => { $('a-copy').textContent = 'Copy link'; }, 2200);
+  });
+
+  document.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', () => b.closest('dialog').close()));
+  document.querySelectorAll('dialog').forEach((d) => d.addEventListener('click', (e) => { if (e.target === d) d.close(); }));
+
+  // ── The bank spreadsheet ────────────────────────────────────────────────────
+  // Names, emails and amounts only. Bank details are not kept by Maclo: they
+  // live as saved payees in the business account, which is built to hold them.
+  $('csv').addEventListener('click', () => {
+    if (!data) return;
+    const due = data.creators.filter((c) => c.owedNow.due);
+    const month = new Date().toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }).toUpperCase();
+    const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const lines = [['Name', 'Code', 'Email', 'Amount (GBP)', 'Reference'].map(q).join(',')];
+    for (const c of due) lines.push([c.name, c.code, c.email || '', (c.owedNow.pence / 100).toFixed(2), `MACLO ${month} ${c.code}`].map(q).join(','));
+    const blob = new Blob([lines.join('\r\n') + '\r\n'], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = `maclo-creator-payments-${new Date().toISOString().slice(0, 7)}.csv`;
+    document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+
+  sb.auth.onAuthStateChange((event) => { if (event === 'SIGNED_OUT') { $('who').hidden = true; show('signin'); } });
+  start();
+})();
+</script>
+</body>
+</html>

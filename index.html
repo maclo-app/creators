@@ -72,6 +72,8 @@
   .split b, .tiles b { font-size: 20px; font-weight: 800; letter-spacing: -.5px; }
   .label { font-size: 12px; font-weight: 600; color: var(--muted); }
   .note { background: var(--warn-soft); color: var(--warn); border-radius: 14px; padding: 10px 14px; font-size: 13px; font-weight: 600; }
+  .next { background: var(--lime-soft); border-radius: 14px; padding: 12px 14px; display: grid; gap: 2px; }
+  .next b { font-size: 17px; font-weight: 700; color: var(--lime-ink); }
 
   .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
   .tiles div { background: var(--fog); border-radius: 14px; padding: 14px 12px; display: grid; gap: 2px; }
@@ -135,6 +137,7 @@
       <h2 id="h-money">Your commission</h2>
       <div class="money"><span class="label">Ready to be paid</span><span class="big" id="payable"></span></div>
       <p class="note" id="owing" hidden></p>
+      <div class="next" id="next"><span class="label">Your next payment</span><b id="next-line"></b><span class="small muted" id="next-sub"></span></div>
       <div class="split">
         <div><span class="label">Pending</span><b id="pending"></b></div>
         <div><span class="label">Paid so far</span><b id="paid"></b></div>
@@ -225,6 +228,17 @@
     $('owing').hidden = c.payablePence >= 0;
     if (c.payablePence < 0) $('owing').textContent = `${gbp(-c.payablePence)} will come off your next commission, because a sale was refunded after you had been paid for it.`;
     $('pending-note').textContent = `Pending commission is inside Apple's ${d.rates.holdDays}-day refund window. It moves to "ready to be paid" when that passes.`;
+    // Older deploys of the function did not send this; the card simply stays hidden.
+    const np = d.nextPayment;
+    $('next').hidden = !np;
+    if (np) {
+      $('next-line').textContent = np.due ? `${gbp(np.expectedPence)} on ${day(np.date)}` : `Nothing due on ${day(np.date)}`;
+      $('next-sub').textContent = np.due
+        ? 'Expected: a refund before then would still come off it.'
+        : np.expectedPence > 0
+          ? `${gbp(np.expectedPence)} is under the ${gbp(np.minimumPence)} minimum, so it carries over to the month after.`
+          : 'Payments go out on the 15th of each month.';
+    }
 
     $('f-entries').textContent = d.funnel.codeEntries;
     $('f-trials').textContent = d.funnel.trialsStarted;
@@ -262,6 +276,8 @@
       `Founder Lifetime: ${gbp(d.rates.lifetimePence)} once.`,
       'A free trial counts once it turns into a payment. Until then it shows as a trial.',
       `Commission is ready to be paid ${d.rates.holdDays} days after the payment. If Apple refunds a sale, its commission is removed.`,
+      `We pay on the 15th of each month, for everything that was ready by the end of the month before. Under ${gbp(d.nextPayment?.minimumPence ?? 2000)} carries over to the next month.`,
+      'If a sale is refunded after we have paid you for it, that amount comes off your next payment.',
       'Apple does not tell anyone which code led to a download, so this page counts people who entered your code, not downloads.',
     ]) { const li = document.createElement('li'); li.textContent = text; rules.append(li); }
 
