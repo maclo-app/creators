@@ -120,6 +120,8 @@
   .chip.pending { background: var(--fog); color: var(--soft); }
   .chip.payable, .chip.paid { background: var(--lime-soft); color: var(--lime-ink); }
   .chip.void, .chip.adjust { background: var(--error-soft); color: var(--error); }
+  .chip.test { background: var(--fog); color: var(--soft); }
+  .testline { background: var(--fog); color: var(--soft); border-radius: 14px; padding: 10px 14px; font-size: 13px; font-weight: 600; margin: 0; }
 
   .activity li { font-size: 13px; }
 
@@ -185,6 +187,7 @@
       <div class="tile"><span class="label">Paid out</span><b id="t-paid"></b></div>
       <div class="tile"><span class="label">Creators</span><b id="t-creators"></b><span class="label" id="t-creators-sub"></span></div>
     </section>
+    <p class="testline" id="t-test" hidden></p>
 
     <section class="card run" aria-labelledby="h-run">
       <div class="row">
@@ -247,6 +250,7 @@
       <div class="scroll"><table class="mini"><thead><tr><th scope="col">Month</th><th scope="col">Code entered</th><th scope="col">New paying</th><th scope="col">Commission</th></tr></thead><tbody id="d-months"></tbody></table></div>
     </div>
     <div><h3>Recent commission</h3><ul class="list" id="d-recent"></ul><p class="muted small" id="d-recent-empty" hidden>Nothing yet.</p></div>
+    <div id="d-test" hidden><h3>Test purchases</h3><p class="testline" id="d-test-line"></p><ul class="list" id="d-test-list"></ul></div>
     <div><h3>Payments made</h3><ul class="list" id="d-payouts"></ul><p class="muted small" id="d-payouts-empty" hidden>None yet.</p></div>
     <form class="form" id="d-form" style="max-width:none">
       <h3>Details</h3>
@@ -380,6 +384,10 @@
     $('t-paying').textContent = t.paying; $('t-trials').textContent = t.trials; $('t-entries').textContent = t.codeEntries;
     $('t-earned').textContent = gbp(t.earnedPence); $('t-paid').textContent = gbp(t.paidPence);
     $('t-creators').textContent = t.creators; $('t-creators-sub').textContent = `${t.active} active`;
+    // TestFlight purchases, never in the tiles above. Older deploys did not send them.
+    const anyTest = (t.testTrials ?? 0) + (t.testPaying ?? 0) > 0;
+    $('t-test').hidden = !anyTest;
+    if (anyTest) $('t-test').textContent = `Test purchases on TestFlight, not real money and not in the numbers above: ${t.testPaying} paid, ${t.testTrials} free trial${t.testTrials === 1 ? '' : 's'}, ${gbp(t.testCommissionPence)} test commission.`;
 
     const cutoff = new Date(run.cutoff).toLocaleDateString('en-GB', { timeZone: 'Europe/London', day: 'numeric', month: 'long' });
     $('run-rule').textContent = `Payments go out on the ${run.dayOfMonth}th. Each covers commission that was ready before ${cutoff}, and anyone under ${gbp(run.minimumPence)} carries over to next month. Pay each one in your bank first, then mark it as paid here with the bank reference.`;
@@ -509,6 +517,21 @@
       const right = el('div', null, 'what'); right.style.justifyItems = 'end';
       right.append(el('b', r.status === 'void' ? '£0.00' : gbp(r.amountPence)), el('span', label, `chip ${r.status === 'refund adjustment' ? 'adjust' : r.status}`));
       li.append(what, right); recent.append(li);
+    }
+    const tt = c.test;
+    const hasTest = !!tt && tt.trialsStarted + tt.payingUsers + tt.recent.length > 0;
+    $('d-test').hidden = !hasTest;
+    if (hasTest) {
+      $('d-test-line').textContent = `TestFlight purchases, not real money and never paid out: ${tt.payingUsers} paid, ${tt.trialsStarted} free trial${tt.trialsStarted === 1 ? '' : 's'}, ${gbp(tt.commissionPence)} test commission.`;
+      const list = $('d-test-list'); list.replaceChildren();
+      for (const r of tt.recent) {
+        const li = document.createElement('li');
+        const what = el('div', null, 'what'); what.append(el('b', PLAN[r.plan] || r.plan), el('span', day(r.date), 'muted small'));
+        const right = el('div', null, 'what'); right.style.justifyItems = 'end';
+        const label = r.status === 'void' ? 'Refunded' : r.status === 'refund adjustment' ? 'Refund adjustment' : 'Test';
+        right.append(el('b', r.status === 'void' ? '£0.00' : gbp(r.amountPence)), el('span', label, `chip ${r.status === 'test' ? 'test' : r.status === 'void' ? 'void' : 'adjust'}`));
+        li.append(what, right); list.append(li);
+      }
     }
     const pays = $('d-payouts'); pays.replaceChildren(); $('d-payouts-empty').hidden = c.payouts.length > 0;
     for (const p of c.payouts) { const li = document.createElement('li'); const what = el('div', null, 'what'); what.append(el('b', day(p.date)), el('span', p.reference || 'Payment', 'muted small')); li.append(what, el('b', gbp(p.amountPence))); pays.append(li); }

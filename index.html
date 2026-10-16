@@ -100,6 +100,8 @@
   .chip.payable, .chip.paid { background: var(--lime-soft); color: var(--lime-ink); }
   .chip.pending { background: var(--fog); color: var(--soft); }
   .chip.void, .chip.adjust { background: var(--error-soft); color: var(--error); }
+  .chip.test { background: var(--fog); color: var(--soft); }
+  .testnote { background: var(--fog); color: var(--soft); border-radius: 14px; padding: 10px 14px; font-size: 13px; font-weight: 600; }
   ul.rules { margin: 0; padding-left: 18px; display: grid; gap: 6px; color: var(--soft); max-width: 62ch; }
   footer { color: var(--muted); font-size: 12px; text-align: center; display: grid; gap: 10px; justify-items: center; }
   .state { text-align: center; padding: 48px 20px; }
@@ -169,6 +171,17 @@
       <h2 id="h-recent">Recent commission</h2>
       <p class="muted small" id="recent-empty" hidden>Nothing yet. Each sale appears here as soon as Apple confirms the payment.</p>
       <ul class="list" id="recent"></ul>
+    </section>
+
+    <section class="card" aria-labelledby="h-test" id="test-card" hidden>
+      <h2 id="h-test">Test purchases</h2>
+      <p class="testnote">Purchases made with your code in Maclo's test app, TestFlight. They are not real money, they are in none of the totals above, and they are never paid out.</p>
+      <div class="split">
+        <div><span class="label">Free trials</span><b id="t-trials"></b></div>
+        <div><span class="label">Paid</span><b id="t-paying"></b></div>
+        <div><span class="label">Test commission</span><b id="t-commission"></b></div>
+      </div>
+      <ul class="list" id="test-recent"></ul>
     </section>
 
     <section class="card" aria-labelledby="h-payouts" id="payouts-card" hidden>
@@ -263,6 +276,24 @@
         : r.status === 'paid' ? 'Paid' : r.status === 'void' ? 'Refunded' : 'Refund adjustment';
       const chip = el('span', label, `chip ${r.status === 'refund adjustment' ? 'adjust' : r.status}`);
       recent.append(item(PLAN[r.plan] || r.plan, day(r.date), r.status === 'void' ? '£0.00' : gbp(r.amountPence), chip));
+    }
+
+    // TestFlight purchases, apart from the money. Older deploys of the function
+    // did not send them; the card simply stays hidden.
+    const t = d.test;
+    const hasTest = !!t && t.trialsStarted + t.payingUsers + t.recent.length > 0;
+    $('test-card').hidden = !hasTest;
+    if (hasTest) {
+      $('t-trials').textContent = t.trialsStarted;
+      $('t-paying').textContent = t.payingUsers;
+      $('t-commission').textContent = gbp(t.commissionPence);
+      const list = $('test-recent'); list.replaceChildren();
+      list.hidden = t.recent.length === 0;
+      for (const r of t.recent) {
+        const label = r.status === 'void' ? 'Refunded' : r.status === 'refund adjustment' ? 'Refund adjustment' : 'Test';
+        const chip = el('span', label, `chip ${r.status === 'test' ? 'test' : r.status === 'void' ? 'void' : 'adjust'}`);
+        list.append(item(PLAN[r.plan] || r.plan, day(r.date), r.status === 'void' ? '£0.00' : gbp(r.amountPence), chip));
+      }
     }
 
     $('payouts-card').hidden = d.payouts.length === 0;
